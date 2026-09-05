@@ -7,7 +7,7 @@ const services = [
  ['03', 'Shape & length', 'Your silhouette, refined.', 'shape', 'manicure-detail.jpg'],
  ['04', 'Nail artistry', 'The smallest canvas. Your expression.', 'art', 'manicure-pink.jpg'],
 ];
-function Logo() { return <a className="logo" href="#top" aria-label="SOLÉA.Co home"><img src="/media/solea-logo.jpg" alt="SOLÉA.Co" /></a>; }
+function Logo() { return <a className="logo" href="#top" aria-label="SOLÉA.Co home"><img src="/media/solea-logo-dark.png" alt="SOLÉA.Co" /></a>; }
 export default function Home() {
  const booking = useRef<HTMLDialogElement>(null);
  return <main id="top">
@@ -22,6 +22,3 @@ export default function Home() {
   <dialog ref={booking} className="booking-dialog" aria-labelledby="booking-title" onClick={event => { if(event.target === event.currentTarget) booking.current?.close(); }}><button className="dialog-close" aria-label="Close appointment information" onClick={() => booking.current?.close()}>×</button><p className="eyebrow">YOUR SOLÉA.Co MOMENT</p><h2 id="booking-title">Something lovely<br />is <em>on its way.</em></h2><p>Online booking is coming soon. Please check back for appointment availability.</p><form method="dialog"><button className="button">Keep exploring <span>↗</span></button></form></dialog>
  </main>;
 }
-
-
-

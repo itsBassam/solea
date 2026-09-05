@@ -11,3 +11,7 @@
 .service-card img{transform:none}.service-card:hover img{transform:scale(1.06)}.shape img{object-position:50% 50%}.art img{object-position:60% 50%}
 h1,h2,h3{overflow-wrap:break-word}.header{gap:20px}.logo{flex-shrink:0}.header .button{min-width:0}.header nav{flex-wrap:wrap}.button{max-width:100%}
 @media(max-width:600px){.hero-description{max-width:190px}.hero-copy .button{margin-top:4px}}
+/* The dark logo blends into the surface; no enclosing panel or color-inverting filter. */
+.logo{background:transparent;width:180px;height:59px;mix-blend-mode:lighten}
+.logo img{width:188px;left:-9px;top:-49px}
+@media(max-width:600px){.header .logo{height:48px}.header .logo img{width:145px;left:-7px;top:-38px}}
