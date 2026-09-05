@@ -120,6 +120,7 @@ export async function listServices(
 export async function listAvailableTimes(
   serviceId: string,
   date: string,
+  excludeAppointmentId = '',
 ): Promise<string[]> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
   await ensureStudioSeed();
@@ -144,15 +145,12 @@ export async function listAvailableTimes(
     .bind(day)
     .first<Record<string, unknown>>();
   if (!rule || Number(rule.enabled) !== 1) return [];
-  const bufferRow = await db
-    .prepare("SELECT value FROM studio_settings WHERE key = 'buffer_minutes'")
-    .first<{ value: string }>();
-  const buffer = Math.max(0, Number(bufferRow?.value || 0));
+  const buffer = await getBufferMinutes(db);
   const booked = await db
     .prepare(
-      "SELECT start_time, end_time FROM appointments WHERE appointment_date = ? AND status != 'cancelled'",
+      "SELECT start_time, end_time FROM appointments WHERE appointment_date = ? AND status != 'cancelled' AND id != ?",
     )
-    .bind(date)
+    .bind(date, excludeAppointmentId)
     .all<{ start_time: string; end_time: string }>();
   const start = toMinutes(asText(rule.start_time));
   const end = toMinutes(asText(rule.end_time));
@@ -229,6 +227,13 @@ export async function createBooking(input: BookingInput) {
   const manageToken = crypto.randomUUID();
   const endTime = fromMinutes(toMinutes(input.time) + service.duration_minutes);
   const slotKey = `${input.date}|${input.time}|staff_owner`;
+  const buffer = await getBufferMinutes(db);
+  const occupiedSlots = reservationSlotKeys(
+    input.date,
+    input.time,
+    service.duration_minutes,
+    buffer,
+  );
   try {
     await db.batch([
       db
@@ -265,6 +270,13 @@ export async function createBooking(input: BookingInput) {
           now,
           now,
         ),
+      ...occupiedSlots.map((occupiedSlot) =>
+        db
+          .prepare(
+            'INSERT INTO appointment_slots (slot_key, appointment_id, created_at) VALUES (?, ?, ?)',
+          )
+          .bind(occupiedSlot, appointmentId, now),
+      ),
       db
         .prepare(`INSERT INTO messages
         (id, customer_id, appointment_id, kind, channel, body, status, scheduled_for, created_at)
@@ -319,12 +331,16 @@ export async function manageBooking(input: {
     throw new Error('This appointment link is no longer valid.');
   const now = new Date().toISOString();
   if (input.action === 'cancel') {
-    await db
-      .prepare(
-        "UPDATE appointments SET status = 'cancelled', slot_key = NULL, updated_at = ? WHERE id = ?",
-      )
-      .bind(now, input.id)
-      .run();
+    await db.batch([
+      db
+        .prepare('DELETE FROM appointment_slots WHERE appointment_id = ?')
+        .bind(input.id),
+      db
+        .prepare(
+          "UPDATE appointments SET status = 'cancelled', slot_key = NULL, updated_at = ? WHERE id = ?",
+        )
+        .bind(now, input.id),
+    ]);
     return { id: input.id, status: 'cancelled' };
   }
   if (!input.date || !input.time)
@@ -332,6 +348,7 @@ export async function manageBooking(input: {
   const available = await listAvailableTimes(
     appointment.service_id,
     input.date,
+    appointment.id,
   );
   if (!available.includes(input.time))
     throw new Error('That time is not available.');
@@ -341,19 +358,45 @@ export async function manageBooking(input: {
     .first<{ duration_minutes: number }>();
   if (!service) throw new Error('Service unavailable.');
   const endTime = fromMinutes(toMinutes(input.time) + service.duration_minutes);
-  await db
-    .prepare(
-      "UPDATE appointments SET appointment_date = ?, start_time = ?, end_time = ?, slot_key = ?, status = 'confirmed', updated_at = ? WHERE id = ?",
-    )
-    .bind(
-      input.date,
-      input.time,
-      endTime,
-      `${input.date}|${input.time}|staff_owner`,
-      now,
-      input.id,
-    )
-    .run();
+  const buffer = await getBufferMinutes(db);
+  try {
+    await db.batch([
+      db
+        .prepare('DELETE FROM appointment_slots WHERE appointment_id = ?')
+        .bind(input.id),
+      db
+        .prepare(
+          "UPDATE appointments SET appointment_date = ?, start_time = ?, end_time = ?, slot_key = ?, status = 'confirmed', updated_at = ? WHERE id = ?",
+        )
+        .bind(
+          input.date,
+          input.time,
+          endTime,
+          `${input.date}|${input.time}|staff_owner`,
+          now,
+          input.id,
+        ),
+      ...reservationSlotKeys(
+        input.date,
+        input.time,
+        service.duration_minutes,
+        buffer,
+      ).map((occupiedSlot) =>
+        db
+          .prepare(
+            'INSERT INTO appointment_slots (slot_key, appointment_id, created_at) VALUES (?, ?, ?)',
+          )
+          .bind(occupiedSlot, input.id, now),
+      ),
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : asText(error);
+    if (message.toLowerCase().includes('unique'))
+      throw new Error(
+        'That time has just become unavailable. Please choose another.',
+      );
+    throw error;
+  }
   return {
     id: input.id,
     status: 'confirmed',
@@ -389,7 +432,10 @@ export async function getStudioData(): Promise<StudioData> {
   ] = await Promise.all([
     db
       .prepare(`SELECT a.*, c.full_name customer_name, c.phone customer_phone, c.email customer_email,
-      c.preferred_contact, s.name service_name FROM appointments a
+      c.preferred_contact, s.name service_name,
+      (SELECT SUM(p.amount_sar) FROM payments p WHERE p.appointment_id = a.id AND p.status = 'paid') recorded_payment_sar,
+      (SELECT MAX(p.status) FROM payments p WHERE p.appointment_id = a.id) payment_status
+      FROM appointments a
       JOIN customers c ON c.id = a.customer_id JOIN services s ON s.id = a.service_id
       ORDER BY a.appointment_date DESC, a.start_time DESC LIMIT 500`)
       .all<Record<string, unknown>>(),
@@ -450,6 +496,7 @@ export async function getStudioData(): Promise<StudioData> {
     phone: asText(row.phone),
     email: nullable(row.email),
     preferredContact: asText(row.preferred_contact),
+    createdAt: asText(row.created_at),
     totalVisits: Number(row.total_visits || 0),
     lastVisit: nullable(row.last_visit),
     nextAppointment: nullable(row.next_appointment),
@@ -478,7 +525,7 @@ export async function getStudioData(): Promise<StudioData> {
     completed + appointments.filter((item) => item.status === 'no-show').length;
   const revenue = clients.reduce((sum, client) => sum + client.totalSpend, 0);
   const paidBookings = appointments.filter(
-    (item) => item.status === 'completed' && item.quotedPriceSar !== null,
+    (item) => item.recordedPaymentSar !== null,
   );
   return {
     appointments,
@@ -520,7 +567,9 @@ export async function getStudioData(): Promise<StudioData> {
     metrics: {
       todayAppointments: todayAppointments.length,
       upcomingAppointments: upcoming.length,
-      newClients: clients.filter((client) => client.totalVisits <= 1).length,
+      newClients: clients.filter(
+        (client) => client.createdAt.slice(0, 7) === today.slice(0, 7),
+      ).length,
       revenue,
       cancellationRate: appointments.length
         ? Math.round((cancelled / appointments.length) * 100)
@@ -542,6 +591,7 @@ export async function studioMutation(input: Record<string, unknown>) {
   const now = new Date().toISOString();
   const action = asText(input.action);
   if (action === 'appointment-status') {
+    const id = asText(input.id);
     const status = asText(input.status);
     if (
       !['confirmed', 'pending', 'completed', 'cancelled', 'no-show'].includes(
@@ -549,12 +599,89 @@ export async function studioMutation(input: Record<string, unknown>) {
       )
     )
       throw new Error('Invalid appointment status.');
-    await db
-      .prepare(
-        "UPDATE appointments SET status = ?, slot_key = CASE WHEN ? = 'cancelled' THEN NULL ELSE slot_key END, updated_at = ? WHERE id = ?",
-      )
-      .bind(status, status, now, asText(input.id))
-      .run();
+    if (status === 'cancelled') {
+      await db.batch([
+        db
+          .prepare('DELETE FROM appointment_slots WHERE appointment_id = ?')
+          .bind(id),
+        db
+          .prepare(
+            "UPDATE appointments SET status = 'cancelled', slot_key = NULL, updated_at = ? WHERE id = ?",
+          )
+          .bind(now, id),
+      ]);
+    } else if (status === 'confirmed') {
+      const appointment = await db
+        .prepare(
+          'SELECT service_id, appointment_date, start_time, status FROM appointments WHERE id = ?',
+        )
+        .bind(id)
+        .first<{
+          service_id: string;
+          appointment_date: string;
+          start_time: string;
+          status: string;
+        }>();
+      if (!appointment) throw new Error('Appointment not found.');
+      if (appointment.status === 'cancelled') {
+        const available = await listAvailableTimes(
+          appointment.service_id,
+          appointment.appointment_date,
+          id,
+        );
+        if (!available.includes(appointment.start_time))
+          throw new Error('That time is no longer available.');
+        const service = await db
+          .prepare('SELECT duration_minutes FROM services WHERE id = ?')
+          .bind(appointment.service_id)
+          .first<{ duration_minutes: number }>();
+        if (!service) throw new Error('Service unavailable.');
+        const buffer = await getBufferMinutes(db);
+        try {
+          await db.batch([
+            db
+              .prepare(
+                "UPDATE appointments SET status = 'confirmed', slot_key = ?, updated_at = ? WHERE id = ?",
+              )
+              .bind(
+                `${appointment.appointment_date}|${appointment.start_time}|staff_owner`,
+                now,
+                id,
+              ),
+            ...reservationSlotKeys(
+              appointment.appointment_date,
+              appointment.start_time,
+              service.duration_minutes,
+              buffer,
+            ).map((occupiedSlot) =>
+              db
+                .prepare(
+                  'INSERT INTO appointment_slots (slot_key, appointment_id, created_at) VALUES (?, ?, ?)',
+                )
+                .bind(occupiedSlot, id, now),
+            ),
+          ]);
+        } catch (error) {
+          if (isUniqueConflict(error))
+            throw new Error('That time is no longer available.');
+          throw error;
+        }
+      } else {
+        await db
+          .prepare(
+            "UPDATE appointments SET status = 'confirmed', updated_at = ? WHERE id = ?",
+          )
+          .bind(now, id)
+          .run();
+      }
+    } else {
+      await db
+        .prepare(
+          'UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?',
+        )
+        .bind(status, now, id)
+        .run();
+    }
   } else if (action === 'appointment-note') {
     const body = clean(asText(input.body));
     if (!body) throw new Error('Write a note first.');
@@ -590,7 +717,11 @@ export async function studioMutation(input: Record<string, unknown>) {
       .bind(id)
       .first<{ service_id: string }>();
     if (!appointment) throw new Error('Appointment not found.');
-    const available = await listAvailableTimes(appointment.service_id, date);
+    const available = await listAvailableTimes(
+      appointment.service_id,
+      date,
+      id,
+    );
     if (!available.includes(time)) throw new Error('That time is unavailable.');
     const service = await db
       .prepare('SELECT duration_minutes FROM services WHERE id = ?')
@@ -599,12 +730,35 @@ export async function studioMutation(input: Record<string, unknown>) {
     const endTime = fromMinutes(
       toMinutes(time) + Number(service?.duration_minutes || 45),
     );
-    await db
-      .prepare(
-        "UPDATE appointments SET appointment_date = ?, start_time = ?, end_time = ?, slot_key = ?, status = 'confirmed', updated_at = ? WHERE id = ?",
-      )
-      .bind(date, time, endTime, `${date}|${time}|staff_owner`, now, id)
-      .run();
+    const buffer = await getBufferMinutes(db);
+    try {
+      await db.batch([
+        db
+          .prepare('DELETE FROM appointment_slots WHERE appointment_id = ?')
+          .bind(id),
+        db
+          .prepare(
+            "UPDATE appointments SET appointment_date = ?, start_time = ?, end_time = ?, slot_key = ?, status = 'confirmed', updated_at = ? WHERE id = ?",
+          )
+          .bind(date, time, endTime, `${date}|${time}|staff_owner`, now, id),
+        ...reservationSlotKeys(
+          date,
+          time,
+          Number(service?.duration_minutes || 45),
+          buffer,
+        ).map((occupiedSlot) =>
+          db
+            .prepare(
+              'INSERT INTO appointment_slots (slot_key, appointment_id, created_at) VALUES (?, ?, ?)',
+            )
+            .bind(occupiedSlot, id, now),
+        ),
+      ]);
+    } catch (error) {
+      if (isUniqueConflict(error))
+        throw new Error('That time has just become unavailable.');
+      throw error;
+    }
   } else if (action === 'service-save') {
     const id = asText(input.id) || crypto.randomUUID();
     const name = clean(asText(input.name));
@@ -706,6 +860,38 @@ export async function studioMutation(input: Record<string, unknown>) {
         now,
       )
       .run();
+  } else if (action === 'payment-record') {
+    const appointmentId = asText(input.appointmentId);
+    const appointment = await db
+      .prepare('SELECT quoted_price_sar FROM appointments WHERE id = ?')
+      .bind(appointmentId)
+      .first<{ quoted_price_sar: number | null }>();
+    if (!appointment || appointment.quoted_price_sar === null)
+      throw new Error('Set a service price before recording payment.');
+    await db.batch([
+      db
+        .prepare(
+          "DELETE FROM payments WHERE appointment_id = ? AND status = 'paid'",
+        )
+        .bind(appointmentId),
+      db
+        .prepare(`INSERT INTO payments (id, appointment_id, amount_sar, status, paid_at, created_at)
+        VALUES (?, ?, ?, 'paid', ?, ?)`)
+        .bind(
+          crypto.randomUUID(),
+          appointmentId,
+          appointment.quoted_price_sar,
+          now,
+          now,
+        ),
+    ]);
+  } else if (action === 'payment-remove') {
+    await db
+      .prepare(
+        "DELETE FROM payments WHERE appointment_id = ? AND status = 'paid'",
+      )
+      .bind(asText(input.appointmentId))
+      .run();
   } else if (action === 'client-note') {
     const body = clean(asText(input.body));
     if (!body) throw new Error('Write a note first.');
@@ -763,6 +949,12 @@ function mapAppointment(row: Record<string, unknown>): Appointment {
       row.quoted_price_sar === null || row.quoted_price_sar === undefined
         ? null
         : Number(row.quoted_price_sar),
+    recordedPaymentSar:
+      row.recorded_payment_sar === null ||
+      row.recorded_payment_sar === undefined
+        ? null
+        : Number(row.recorded_payment_sar),
+    paymentStatus: nullable(row.payment_status),
     status: asText(row.status),
     customerNotes: nullable(row.customer_notes),
     internalNotes: nullable(row.internal_notes),
@@ -827,6 +1019,30 @@ function fromMinutes(value: number) {
   const hour = Math.floor(value / 60);
   const minute = value % 60;
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+async function getBufferMinutes(db: D1Database) {
+  const row = await db
+    .prepare("SELECT value FROM studio_settings WHERE key = 'buffer_minutes'")
+    .first<{ value: string }>();
+  return Math.max(0, Number(row?.value || 0));
+}
+function reservationSlotKeys(
+  date: string,
+  startTime: string,
+  durationMinutes: number,
+  bufferMinutes: number,
+) {
+  const start = toMinutes(startTime);
+  const end = start + durationMinutes + bufferMinutes;
+  const slots: string[] = [];
+  for (let cursor = start; cursor < end; cursor += 30) {
+    slots.push(`${date}|${fromMinutes(cursor)}|staff_owner`);
+  }
+  return slots;
+}
+function isUniqueConflict(error: unknown) {
+  const message = error instanceof Error ? error.message : asText(error);
+  return message.toLowerCase().includes('unique');
 }
 function formatHumanDate(value: string) {
   return new Intl.DateTimeFormat('en-GB', {

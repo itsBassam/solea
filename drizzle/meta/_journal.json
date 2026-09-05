@@ -8,6 +8,13 @@
       "when": 1788589823429,
       "tag": "0000_faithful_peter_quill",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788595089768,
+      "tag": "0001_dry_madelyne_pryor",
+      "breakpoints": true
     }
   ]
 }

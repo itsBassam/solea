@@ -1,59 +1,26 @@
 import Link from 'next/link';
+import { ArrowUpRight } from 'lucide-react';
+import { listServices } from '@/lib/crm-db';
+import { SiteFooter, SiteHeader } from './brand-chrome';
 import ScrollFilm from './scroll-film';
-const services = [
-  [
-    '01',
-    'The manicure',
-    'A beautifully considered foundation.',
-    'manicure',
-    'manicure-natural.jpg',
-  ],
-  [
-    '02',
-    'Gel & gloss',
-    'Colour with a little more staying power.',
-    'gel',
-    'ombre-nails.jpg',
-  ],
-  [
-    '03',
-    'Shape & length',
-    'Your silhouette, refined.',
-    'shape',
-    'manicure-detail.jpg',
-  ],
-  [
-    '04',
-    'Nail artistry',
-    'The smallest canvas. Your expression.',
-    'art',
-    'manicure-pink.jpg',
-  ],
-];
-function Logo() {
-  return (
-    <a className="logo" href="#top" aria-label="SOLÉA.Co home">
-      <img src="/media/solea-logo-dark.png" alt="SOLÉA.Co" />
-    </a>
-  );
-}
-export default function Home() {
+
+export const dynamic = 'force-dynamic';
+
+const servicePresentation: Record<string, { style: string; image: string }> = {
+  svc_manicure: { style: 'manicure', image: 'manicure-natural.jpg' },
+  svc_gel: { style: 'gel', image: 'ombre-nails.jpg' },
+  svc_shape: { style: 'shape', image: 'manicure-detail.jpg' },
+  svc_artistry: { style: 'art', image: 'manicure-pink.jpg' },
+};
+
+export default async function Home() {
+  const services = await listServices();
   return (
     <main id="top">
       <a className="skip-link" href="#about">
         Skip to content
       </a>
-      <header className="header">
-        <Logo />
-        <nav aria-label="Main navigation">
-          <a href="#about">The atelier</a>
-          <a href="#services">Our services</a>
-          <a href="#details">The details</a>
-        </nav>
-        <Link className="button small" href="/booking">
-          Book a moment <span>↗</span>
-        </Link>
-      </header>
+      <SiteHeader overlay />
       <ScrollFilm />
       <section className="about section-pad" id="about">
         <div className="about-copy">
@@ -69,9 +36,9 @@ export default function Home() {
             A little time for yourself. A colour that feels like you. Nails that
             make the everyday feel a little more extraordinary.
           </p>
-          <a className="text-link" href="#services">
-            Find your signature <span>↗</span>
-          </a>
+          <Link className="text-link" href="/about">
+            Read our story <ArrowUpRight aria-hidden="true" size={18} />
+          </Link>
         </div>
         <figure className="about-image">
           <img
@@ -86,7 +53,8 @@ export default function Home() {
               target="_blank"
               rel="noreferrer"
             >
-              Diamond Nails / Total Fitouts ↗
+              Diamond Nails / Total Fitouts
+              <ArrowUpRight aria-hidden="true" size={15} />
             </a>
           </figcaption>
         </figure>
@@ -101,27 +69,47 @@ export default function Home() {
             </h2>
           </div>
           <Link className="text-link" href="/booking">
-            Make it yours <span>↗</span>
+            Make it yours <ArrowUpRight aria-hidden="true" size={16} />
           </Link>
         </div>
         <div className="service-grid">
-          {services.map(([number, title, description, style, image]) => (
-            <Link
-              className={`service-card ${style}`}
-              href="/booking"
-              key={number}
-            >
-              <div className="service-image">
-                <img src={`/media/${image}`} alt="" loading="lazy" />
-                <span className="service-number">{number}</span>
-                <span className="service-arrow" aria-hidden="true">
-                  ↗
-                </span>
-              </div>
-              <h3>{title}</h3>
-              <p>{description}</p>
-            </Link>
-          ))}
+          {services.map((service, index) => {
+            const presentation = servicePresentation[service.id] || {
+              style: index % 2 ? 'gel' : 'manicure',
+              image: index % 2 ? 'ombre-nails.jpg' : 'manicure-natural.jpg',
+            };
+            return (
+              <Link
+                className={`service-card ${presentation.style}`}
+                href={`/booking?service=${encodeURIComponent(service.id)}`}
+                key={service.id}
+              >
+                <div className="service-image">
+                  <img
+                    src={`/media/${presentation.image}`}
+                    alt=""
+                    loading="lazy"
+                  />
+                  <span className="service-number">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <span className="service-arrow" aria-hidden="true">
+                    <ArrowUpRight size={16} />
+                  </span>
+                </div>
+                <h3>{service.name}</h3>
+                <p>{service.description}</p>
+                <div className="service-facts">
+                  <span>{service.durationMinutes} min</span>
+                  <span>
+                    {service.priceSar === null
+                      ? 'Price by studio'
+                      : `SAR ${new Intl.NumberFormat('en-SA', { maximumFractionDigits: 0 }).format(service.priceSar)}`}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
       <section className="details section-pad" id="details">
@@ -136,9 +124,88 @@ export default function Home() {
           <br />
           Find beauty in the finishing touch.
         </p>
-        <span className="detail-flower" aria-hidden="true">
-          ✳
-        </span>
+      </section>
+      <section
+        className="atelier-journal section-pad"
+        aria-labelledby="journal-title"
+      >
+        <div className="journal-copy">
+          <p className="eyebrow">THE RITUAL, CONSIDERED</p>
+          <h2 id="journal-title">
+            A pause with <em>purpose.</em>
+          </h2>
+          <p>
+            Care is not one grand gesture. It lives in the preparation, the
+            colour chosen slowly, and the final detail that feels entirely your
+            own.
+          </p>
+          <Link className="text-link" href="/about">
+            Inside SOLÉA.Co <ArrowUpRight aria-hidden="true" size={18} />
+          </Link>
+        </div>
+        <div className="journal-gallery">
+          <figure className="journal-feature">
+            <img
+              src="/media/manicure-natural.jpg"
+              alt="A precise natural manicure being shaped"
+              loading="lazy"
+            />
+            <figcaption>01 / THE PREPARATION</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="/media/manicure-pink.jpg"
+              alt="Glossy pink polish being applied"
+              loading="lazy"
+            />
+            <figcaption>02 / THE COLOUR</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="/media/ombre-nails.jpg"
+              alt="Burgundy ombré almond nails"
+              loading="lazy"
+            />
+            <figcaption>03 / THE FINISH</figcaption>
+          </figure>
+        </div>
+      </section>
+      <section
+        className="principles section-pad"
+        aria-labelledby="principles-title"
+      >
+        <div>
+          <p className="eyebrow">WHY SOLÉA.Co</p>
+          <h2 id="principles-title">
+            Quiet luxury, <em>felt.</em>
+          </h2>
+        </div>
+        <ol>
+          <li>
+            <span>01</span>
+            <h3>Personal, always.</h3>
+            <p>
+              A moment shaped around your taste, your pace and the details you
+              return to.
+            </p>
+          </li>
+          <li>
+            <span>02</span>
+            <h3>Craft in focus.</h3>
+            <p>
+              Preparation, proportion and finish receive the same considered
+              attention.
+            </p>
+          </li>
+          <li>
+            <span>03</span>
+            <h3>Time that is yours.</h3>
+            <p>
+              A calm space in the day, made to feel unhurried from booking to
+              final touch.
+            </p>
+          </li>
+        </ol>
       </section>
       <section className="appointment section-pad" id="appointment">
         <div>
@@ -150,7 +217,7 @@ export default function Home() {
           </h2>
           <p>Beautiful nails begin with a little time for you.</p>
           <Link className="button" href="/booking">
-            Book an appointment <span>↗</span>
+            Book an appointment <ArrowUpRight aria-hidden="true" size={16} />
           </Link>
         </div>
         <div className="appointment-image">
@@ -161,13 +228,7 @@ export default function Home() {
           />
         </div>
       </section>
-      <footer>
-        <Logo />
-        <p>Beauty, down to the details.</p>
-        <a className="text-link" href="#top">
-          Back to top ↑
-        </a>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

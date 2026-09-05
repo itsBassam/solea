@@ -17,6 +17,8 @@ export type Appointment = {
   endTime: string;
   durationMinutes: number;
   quotedPriceSar: number | null;
+  recordedPaymentSar: number | null;
+  paymentStatus: string | null;
   status: string;
   customerNotes: string | null;
   internalNotes: string | null;
@@ -35,6 +37,7 @@ export type Client = {
   phone: string;
   email: string | null;
   preferredContact: string;
+  createdAt: string;
   totalVisits: number;
   lastVisit: string | null;
   nextAppointment: string | null;
@@ -49,9 +52,35 @@ export type StudioData = {
   appointments: Appointment[];
   clients: Client[];
   services: Service[];
-  messages: Array<{ id: string; customerName: string | null; kind: string; channel: string; body: string; status: string; scheduledFor: string | null; createdAt: string }>;
-  availability: Array<{ id: string; dayOfWeek: number; startTime: string; endTime: string; breakStart: string | null; breakEnd: string | null; enabled: boolean }>;
+  messages: Array<{
+    id: string;
+    customerName: string | null;
+    kind: string;
+    channel: string;
+    body: string;
+    status: string;
+    scheduledFor: string | null;
+    createdAt: string;
+  }>;
+  availability: Array<{
+    id: string;
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    breakStart: string | null;
+    breakEnd: string | null;
+    enabled: boolean;
+  }>;
   daysOff: Array<{ id: string; date: string; reason: string | null }>;
   settings: { bufferMinutes: number; timezone: string };
-  metrics: { todayAppointments: number; upcomingAppointments: number; newClients: number; revenue: number; cancellationRate: number; attendanceRate: number; averageBookingValue: number; returningClients: number };
+  metrics: {
+    todayAppointments: number;
+    upcomingAppointments: number;
+    newClients: number;
+    revenue: number;
+    cancellationRate: number;
+    attendanceRate: number;
+    averageBookingValue: number;
+    returningClients: number;
+  };
 };

@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'SOLÉA.Co Studio',
   description: 'Beauty, beautifully organised.',
+  robots: { index: false, follow: false },
 };
 
 export default async function StudioPage() {

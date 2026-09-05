@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ArrowLeft, ArrowRight, ArrowUpRight, X } from 'lucide-react';
 import type { Appointment, Client, Service, StudioData } from '@/lib/crm-types';
 
 type View =
@@ -130,7 +131,7 @@ export default function StudioShell({
           </div>
           <div className="studio-header-actions">
             <Link href="/booking" target="_blank">
-              Open booking ↗
+              Open booking <ArrowUpRight aria-hidden="true" size={15} />
             </Link>
             <button
               type="button"
@@ -258,7 +259,9 @@ function Overview({
             Review your service prices and starting durations. We kept
             unconfirmed prices blank.
           </p>
-          <strong>Complete setup ↗</strong>
+          <strong>
+            Complete setup <ArrowUpRight aria-hidden="true" size={15} />
+          </strong>
         </button>
       )}
       <section className="metric-ribbon">
@@ -289,7 +292,7 @@ function Overview({
           title="A quiet rhythm."
           action={
             <button type="button" onClick={() => onNavigate('appointments')}>
-              All appointments ↗
+              All appointments <ArrowUpRight aria-hidden="true" size={15} />
             </button>
           }
         />
@@ -351,7 +354,7 @@ function Overview({
             type="button"
             onClick={() => onNavigate('clients')}
           >
-            Open client book ↗
+            Open client book <ArrowUpRight aria-hidden="true" size={15} />
           </button>
         </div>
       </section>
@@ -420,7 +423,11 @@ function Appointments({
                 <small>{item.durationMinutes} min</small>
               </span>
               <Status value={item.status} />
-              <span className="row-arrow">↗</span>
+              <ArrowUpRight
+                className="row-arrow"
+                aria-hidden="true"
+                size={16}
+              />
             </button>
           ))
         ) : (
@@ -489,7 +496,7 @@ function Clients({
                 </strong>
                 <small>next moment</small>
               </span>
-              <i>↗</i>
+              <ArrowUpRight aria-hidden="true" size={15} />
             </button>
           ))
         ) : (
@@ -551,7 +558,7 @@ function Services({
               </div>
             </dl>
             <button type="button" onClick={() => setEditing(service)}>
-              Edit ↗
+              Edit <ArrowUpRight aria-hidden="true" size={15} />
             </button>
           </article>
         ))}
@@ -579,25 +586,53 @@ function CalendarView({
   mutate: (payload: Record<string, unknown>) => Promise<boolean>;
   onAppointment: (item: Appointment) => void;
 }) {
-  const [offset, setOffset] = useState(0);
-  const days = useMemo(() => weekDays(offset), [offset]);
+  const [mode, setMode] = useState<'day' | 'week' | 'month'>('week');
+  const [cursor, setCursor] = useState(() => new Date());
+  const days = useMemo(() => calendarDays(cursor, mode), [cursor, mode]);
+  const today = localDate(new Date());
   return (
     <div className="studio-view">
+      <div
+        className="calendar-view-switch segmented"
+        aria-label="Calendar view"
+      >
+        {(['day', 'week', 'month'] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={mode === item ? 'active' : ''}
+            aria-pressed={mode === item}
+            onClick={() => setMode(item)}
+          >
+            {titleCase(item)}
+          </button>
+        ))}
+      </div>
       <div className="calendar-toolbar">
-        <button type="button" onClick={() => setOffset(offset - 1)}>
-          ← Previous
+        <button
+          type="button"
+          onClick={() => setCursor(moveCalendar(cursor, mode, -1))}
+        >
+          <ArrowLeft aria-hidden="true" size={15} /> Previous
         </button>
-        <strong>
-          {shortDate(days[0].value)} — {shortDate(days[6].value)}
-        </strong>
-        <button type="button" onClick={() => setOffset(offset + 1)}>
-          Next →
+        <div>
+          <strong>{calendarLabel(cursor, mode, days)}</strong>
+          <button type="button" onClick={() => setCursor(new Date())}>
+            Today
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCursor(moveCalendar(cursor, mode, 1))}
+        >
+          Next <ArrowRight aria-hidden="true" size={15} />
         </button>
       </div>
-      <div className="studio-calendar">
+      <div className={`studio-calendar calendar-${mode}`}>
         {days.map((day) => (
           <section
             key={day.value}
+            className={`${day.value === today ? 'is-today' : ''} ${day.inMonth ? '' : 'is-outside'}`}
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event) => {
               const id = event.dataTransfer.getData('text/appointment');
@@ -616,6 +651,7 @@ function CalendarView({
             <header>
               <span>{day.weekday}</span>
               <strong>{day.day}</strong>
+              <small>{day.month}</small>
             </header>
             <div>
               {data.appointments
@@ -812,6 +848,11 @@ function Analytics({ data }: { data: StudioData }) {
           label="Average value"
           value={`SAR ${money(data.metrics.averageBookingValue)}`}
           detail="Completed bookings"
+        />
+        <Metric
+          label="New clients"
+          value={String(data.metrics.newClients)}
+          detail="This month"
         />
         <Metric
           label="Returning"
@@ -1080,7 +1121,7 @@ function AppointmentSheet({
           onClick={close}
           aria-label="Close"
         >
-          ×
+          <X aria-hidden="true" size={18} />
         </button>
         <p className="studio-kicker">SOLÉA.Co MOMENT</p>
         <h2 id="appointment-sheet-title">{appointment.customerName}</h2>
@@ -1102,6 +1143,22 @@ function AppointmentSheet({
             <dt>Status</dt>
             <dd>
               <Status value={appointment.status} />
+            </dd>
+          </div>
+          <div>
+            <dt>Price</dt>
+            <dd>
+              {appointment.quotedPriceSar === null
+                ? 'Not set'
+                : `SAR ${money(appointment.quotedPriceSar)}`}
+            </dd>
+          </div>
+          <div>
+            <dt>Payment</dt>
+            <dd>
+              {appointment.paymentStatus === 'paid'
+                ? `Recorded · SAR ${money(appointment.recordedPaymentSar || 0)}`
+                : 'Not recorded'}
             </dd>
           </div>
         </dl>
@@ -1127,6 +1184,35 @@ function AppointmentSheet({
           Save note
         </button>
         <div className="sheet-actions">
+          {appointment.paymentStatus === 'paid' ? (
+            <button
+              type="button"
+              onClick={() =>
+                void mutate({
+                  action: 'payment-remove',
+                  appointmentId: appointment.id,
+                })
+              }
+            >
+              Remove recorded payment
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={appointment.quotedPriceSar === null}
+              onClick={() =>
+                void mutate({
+                  action: 'payment-record',
+                  appointmentId: appointment.id,
+                })
+              }
+            >
+              Record payment
+              {appointment.quotedPriceSar === null
+                ? ' · price not set'
+                : ` · SAR ${money(appointment.quotedPriceSar)}`}
+            </button>
+          )}
           <button
             type="button"
             onClick={() =>
@@ -1209,7 +1295,7 @@ function ClientSheet({
         aria-labelledby="client-sheet-title"
       >
         <button className="sheet-close" type="button" onClick={close}>
-          ×
+          <X aria-hidden="true" size={18} />
         </button>
         <p className="studio-kicker">HER SOLÉA.Co MOMENTS</p>
         <h2 id="client-sheet-title">{client.fullName}</h2>
@@ -1356,7 +1442,7 @@ function ServiceEditor({
         }}
       >
         <button className="sheet-close" type="button" onClick={close}>
-          ×
+          <X aria-hidden="true" size={18} />
         </button>
         <p className="studio-kicker">SERVICE DETAILS</p>
         <h2>{service ? 'Refine the service.' : 'Add a new ritual.'}</h2>
@@ -1567,10 +1653,16 @@ function shortDate(value: string) {
 function localDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
-function weekDays(offset: number) {
-  const start = new Date();
-  start.setDate(start.getDate() - start.getDay() + offset * 7);
-  return Array.from({ length: 7 }, (_, index) => {
+function calendarDays(cursor: Date, mode: 'day' | 'week' | 'month') {
+  const start = new Date(cursor);
+  if (mode === 'week') start.setDate(start.getDate() - start.getDay());
+  if (mode === 'month') {
+    start.setDate(1);
+    start.setDate(start.getDate() - start.getDay());
+  }
+  const count = mode === 'day' ? 1 : mode === 'week' ? 7 : 42;
+  const activeMonth = cursor.getMonth();
+  return Array.from({ length: count }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
     return {
@@ -1579,6 +1671,35 @@ function weekDays(offset: number) {
         .format(date)
         .toUpperCase(),
       day: String(date.getDate()).padStart(2, '0'),
+      month: new Intl.DateTimeFormat('en', { month: 'short' })
+        .format(date)
+        .toUpperCase(),
+      inMonth: mode !== 'month' || date.getMonth() === activeMonth,
     };
   });
+}
+
+function moveCalendar(
+  cursor: Date,
+  mode: 'day' | 'week' | 'month',
+  direction: number,
+) {
+  const next = new Date(cursor);
+  if (mode === 'month') next.setMonth(next.getMonth() + direction);
+  else next.setDate(next.getDate() + direction * (mode === 'week' ? 7 : 1));
+  return next;
+}
+
+function calendarLabel(
+  cursor: Date,
+  mode: 'day' | 'week' | 'month',
+  days: ReturnType<typeof calendarDays>,
+) {
+  if (mode === 'day') return formatDate(days[0].value);
+  if (mode === 'week')
+    return `${shortDate(days[0].value)} — ${shortDate(days[6].value)}`;
+  return new Intl.DateTimeFormat('en', {
+    month: 'long',
+    year: 'numeric',
+  }).format(cursor);
 }

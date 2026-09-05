@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { ArrowDown, ArrowUpRight, Pause, Play } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 const LAST_FRAME = 120;
 const frameUrl = (frame: number) =>
@@ -149,7 +150,7 @@ export default function ScrollFilm() {
             <br />A whole lot of you.
           </p>
           <Link href="/booking" className="button">
-            Discover your moment <span>↗</span>
+            Book an appointment <ArrowUpRight aria-hidden="true" size={18} />
           </Link>
         </div>
         <div className="film-frame">
@@ -173,7 +174,7 @@ export default function ScrollFilm() {
         </div>
         <div className="hero-bottom">
           <a href="#about" className="scroll-cue">
-            <span>↓</span> SCROLL TO REVEAL
+            <ArrowDown aria-hidden="true" /> SCROLL TO REVEAL
           </a>
           <span className="hero-edition">
             AN EVERYDAY KIND OF EXTRAORDINARY
@@ -184,7 +185,9 @@ export default function ScrollFilm() {
             aria-pressed={paused}
           >
             {paused ? 'Enable motion' : 'Pause motion'}{' '}
-            <span aria-hidden="true">{paused ? '▷' : 'Ⅱ'}</span>
+            <span aria-hidden="true">
+              {paused ? <Play size={12} /> : <Pause size={12} />}
+            </span>
           </button>
         </div>
         <div className="film-progress" aria-hidden="true" />

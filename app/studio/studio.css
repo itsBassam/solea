@@ -150,6 +150,9 @@
 }
 .studio-header-actions a,
 .studio-header-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   border: 0;
   background: transparent;
   border-bottom: 1px solid #8d7772;
@@ -236,6 +239,9 @@
   color: #76625e;
 }
 .setup-note strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 0.7rem;
   color: var(--studio-wine);
 }
@@ -552,8 +558,7 @@
   color: var(--studio-muted);
   margin-top: 4px;
 }
-.client-book i {
-  font-style: normal;
+.client-book svg {
   color: var(--studio-wine);
 }
 .service-ledger {
@@ -596,6 +601,10 @@
   font-size: 0.78rem;
 }
 .service-ledger article > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   border: 0;
   background: transparent;
   border-bottom: 1px solid var(--studio-wine);
@@ -604,11 +613,25 @@
   font-size: 0.7rem;
 }
 .calendar-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   border: 0;
   background: transparent;
   border-bottom: 1px solid #8d7772;
   padding: 7px 0;
   font-size: 0.7rem;
+}
+.calendar-view-switch {
+  margin-bottom: 22px;
+}
+.calendar-toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.calendar-toolbar > div button {
+  color: var(--studio-wine);
 }
 .calendar-toolbar strong {
   font-family: 'Cormorant Garamond', serif;
@@ -633,6 +656,59 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.studio-calendar > section > header small {
+  display: none;
+  color: var(--studio-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+}
+.studio-calendar > section.is-today > header {
+  background: var(--studio-wine);
+  color: white;
+}
+.studio-calendar > section.is-today > header span,
+.studio-calendar > section.is-today > header small {
+  color: #ead0d0;
+}
+.studio-calendar > section.is-outside {
+  opacity: 0.42;
+}
+.studio-calendar.calendar-day {
+  grid-template-columns: 1fr;
+  min-height: 520px;
+}
+.studio-calendar.calendar-day > section {
+  min-width: 0;
+}
+.studio-calendar.calendar-day > section > header,
+.studio-calendar.calendar-month > section > header {
+  justify-content: flex-start;
+  gap: 12px;
+}
+.studio-calendar.calendar-day > section > header small,
+.studio-calendar.calendar-month > section > header small {
+  display: inline;
+}
+.studio-calendar.calendar-day > section > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  align-content: start;
+  gap: 12px;
+  padding: 18px;
+}
+.studio-calendar.calendar-month {
+  min-height: 0;
+}
+.studio-calendar.calendar-month > section {
+  min-height: 155px;
+}
+.studio-calendar.calendar-month section button {
+  padding: 8px;
+}
+.studio-calendar.calendar-month section button small,
+.studio-calendar.calendar-month section button .status {
+  display: none;
 }
 .studio-calendar > section > header span {
   font-size: 0.58rem;
@@ -775,7 +851,7 @@
   text-align: right;
 }
 .analytics-grid {
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
 }
 .analytics-grid .studio-metric strong {
   font-size: clamp(2rem, 3.2vw, 3.4rem);
@@ -1425,4 +1501,41 @@
   .studio-sidebar nav button {
     transition: none;
   }
+}
+
+/* Keep operational text readable without losing the Studio's editorial density. */
+.studio-wordmark small,
+.studio-kicker,
+.studio-sidefoot a,
+.studio-header-actions a,
+.studio-header-actions button,
+.setup-note,
+.view-toolbar > span,
+.segmented button,
+.wine-button,
+.appointment-ledger small,
+.client-search label,
+.client-book small,
+.service-ledger dt,
+.service-ledger article > button,
+.calendar-toolbar button,
+.studio-calendar > section > header span,
+.studio-calendar section button time,
+.studio-calendar section button small,
+.calendar-note,
+.provider-note,
+.automation-list span {
+  font-size: 0.75rem !important;
+}
+.view-toolbar > p,
+.studio-empty p,
+.studio-loading p,
+.studio-error,
+.appointment-ledger strong,
+.client-book strong,
+.service-ledger p,
+.service-ledger dd,
+.studio-calendar section button strong,
+.automation-list strong {
+  font-size: 0.875rem;
 }
